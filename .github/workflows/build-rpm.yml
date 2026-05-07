@@ -1,0 +1,87 @@
+name: Build and Release RPM for RHEL 9
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - 'v*'           # triggers release on v2.2.4-ubiq-fix1 etc
+  workflow_dispatch:   # allows manual trigger from GitHub UI
+
+jobs:
+  build-rpm:
+    runs-on: ubuntu-latest
+    container:
+      image: rockylinux:9
+
+    steps:
+      - name: Checkout with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            cmake gcc gcc-c++ make rpm-build git \
+            openssl-devel libcurl-devel \
+            gmp-devel libunistring-devel boost-devel
+
+      - name: Verify HTTP/2 fix is present
+        run: |
+          grep -n "HTTP_VERSION" src/lib/curl.c || \
+            (echo "ERROR: HTTP/2 fix not found in curl.c" && exit 1)
+
+      - name: Configure
+        run: |
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_C_FLAGS="-Wno-implicit-function-declaration" \
+            -DCMAKE_INSTALL_PREFIX=/usr/local
+
+      - name: Build
+        run: |
+          cd build
+          make -j$(nproc)
+
+      - name: Package RPM
+        run: |
+          cd build
+          make package
+          find . -name "*.rpm" -ls
+
+      - name: Upload RPM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubiqclient-rhel9-rpm
+          path: build/*.rpm
+          retention-days: 30
+
+      # Only create a GitHub Release when you push a tag like v2.2.4-fix1
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/*.rpm
+          body: |
+            ## Ubiq C/C++ SDK - RHEL 9 RPM (HTTP/2 Fix Applied)
+
+            ### Changes from upstream v2.2.4
+            - Fixed HTTP/2 POST frame mismatch (`CURLOPT_UPLOAD` + `CURLOPT_CUSTOMREQUEST`)
+            - Affects: macOS curl 8.x and RHEL 9.x with nghttp2
+            - Fix: Added `CURLOPT_HTTP_VERSION_1_1` in `src/lib/curl.c`
+
+            ### Install on RHEL 9.7
+```bash
+            sudo rpm -ivh libubiqclient-*.rpm
+            sudo rpm -ivh libubiqclient-dev-*.rpm
+```
+
+            ### Compile your app
+```bash
+            gcc your_app.c -lubiqclient -lssl -lcrypto -lcurl -lgmp -lunistring -o your_app
+```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

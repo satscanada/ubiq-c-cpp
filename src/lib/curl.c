@@ -195,6 +195,30 @@ ubiq_support_http_request(
     if ((rc = curl_easy_setopt(hnd->ch, CURLOPT_URL, urlstr)) == CURLE_OK) {
 
         /*
+         * FIX: Force HTTP/1.1 to avoid HTTP/2 frame type mismatch.
+         *
+         * BUG: When curl is built with nghttp2 (HTTP/2 support), the server
+         * may negotiate HTTP/2 via ALPN. Under HTTP/2, CURLOPT_UPLOAD=1 sets
+         * the stream frame type to PUT at the protocol level. The subsequent
+         * CURLOPT_CUSTOMREQUEST overrides the method header to POST, but does
+         * NOT change the HTTP/2 frame type. The server receives a POST header
+         * on a PUT-framed stream and responds with HTTP 500.
+         *
+         * This affects: macOS (curl 8.x + nghttp2) and RHEL 9.x (curl 7.76+
+         * + nghttp2/1.43.0) wherever the Ubiq API server negotiates HTTP/2.
+         *
+         * FIX: Force HTTP/1.1 so CURLOPT_UPLOAD + CURLOPT_CUSTOMREQUEST
+         * behave consistently across all platforms.
+         *
+         * PROPER LONG-TERM FIX (for Ubiq SDK team): Replace CURLOPT_UPLOAD
+         * with CURLOPT_POST + CURLOPT_POSTFIELDS to correctly set both the
+         * HTTP/2 frame type and method to POST, preserving HTTP/2 compatibility.
+         */
+        UBIQ_CURL_CHECK(curl_easy_setopt(
+            hnd->ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1),
+            "ubiq_support_http_request CURLOPT_HTTP_VERSION");
+
+        /*
          * disable the expect header. otherwise curl will wait
          * for a 100 Continue response from the server (for up to
          * 1 second) before uploading any content.
@@ -204,53 +228,63 @@ ubiq_support_http_request(
             CURLcode rc;
 
             UBIQ_CURL_CHECK(curl_easy_setopt(
-                hnd->ch, CURLOPT_USERAGENT, ubiq_support_user_agent),"ubiq_support_http_request CURLOPT_USERAGENT");
+                hnd->ch, CURLOPT_USERAGENT, ubiq_support_user_agent),
+                "ubiq_support_http_request CURLOPT_USERAGENT");
 
             if (length != 0) {
                 /*
                  * if content is supplied, then set up the
                  * request to read the content for upload
                  */
-
                 hnd->req.buf = content;
                 hnd->req.len = length;
                 hnd->req.off = 0;
 
-
                 UBIQ_CURL_CHECK(curl_easy_setopt(
-                    hnd->ch, CURLOPT_UPLOAD, 1L),"ubiq_support_http_request CURLOPT_UPLOAD");
+                    hnd->ch, CURLOPT_UPLOAD, 1L),
+                    "ubiq_support_http_request CURLOPT_UPLOAD");
                 UBIQ_CURL_CHECK(curl_easy_setopt(
-                    hnd->ch, CURLOPT_READDATA, hnd),"ubiq_support_http_request CURLOPT_READDATA");
+                    hnd->ch, CURLOPT_READDATA, hnd),
+                    "ubiq_support_http_request CURLOPT_READDATA");
                 UBIQ_CURL_CHECK(curl_easy_setopt(
                     hnd->ch, CURLOPT_READFUNCTION,
-                    &ubiq_support_http_upload),"ubiq_support_http_request CURLOPT_READFUNCTION");
+                    &ubiq_support_http_upload),
+                    "ubiq_support_http_request CURLOPT_READFUNCTION");
                 UBIQ_CURL_CHECK(curl_easy_setopt(
-                    hnd->ch, CURLOPT_INFILESIZE, length),"ubiq_support_http_request CURLOPT_INFILESIZE");
+                    hnd->ch, CURLOPT_INFILESIZE, length),
+                    "ubiq_support_http_request CURLOPT_INFILESIZE");
             }
 
             /* add headers to the request */
-            UBIQ_CURL_CHECK(rc = curl_easy_setopt(hnd->ch, CURLOPT_HTTPHEADER, hnd->hlist),"ubiq_support_http_request CURLOPT_HTTPHEADER");
+            UBIQ_CURL_CHECK(rc = curl_easy_setopt(
+                hnd->ch, CURLOPT_HTTPHEADER, hnd->hlist),
+                "ubiq_support_http_request CURLOPT_HTTPHEADER");
             if (rc == CURLE_OK) {
                 /* set the request method: GET, POST, PUT, etc. */
                 UBIQ_CURL_CHECK(curl_easy_setopt(
                     hnd->ch, CURLOPT_CUSTOMREQUEST,
-                    http_request_method_string(method)),"ubiq_support_http_request CURLOPT_CUSTOMREQUEST");
+                    http_request_method_string(method)),
+                    "ubiq_support_http_request CURLOPT_CUSTOMREQUEST");
 
                 /* add callbacks for receiving the response payload */
                 UBIQ_CURL_CHECK(curl_easy_setopt(
-                    hnd->ch, CURLOPT_WRITEDATA, hnd),"ubiq_support_http_request CURLOPT_WRITEDATA");
+                    hnd->ch, CURLOPT_WRITEDATA, hnd),
+                    "ubiq_support_http_request CURLOPT_WRITEDATA");
                 UBIQ_CURL_CHECK(curl_easy_setopt(
                     hnd->ch, CURLOPT_WRITEFUNCTION,
-                    &ubiq_support_http_download),"ubiq_support_http_request CURLOPT_WRITEFUNCTION");
+                    &ubiq_support_http_download),
+                    "ubiq_support_http_request CURLOPT_WRITEFUNCTION");
 
                 hnd->rsp.buf = NULL;
                 hnd->rsp.len = 0;
 
-                UBIQ_CURL_CHECK(curl_easy_setopt(hnd->ch, CURLOPT_NOSIGNAL, 1L),"ubiq_support_http_request CURLOPT_NOSIGNAL");
-
+                UBIQ_CURL_CHECK(curl_easy_setopt(
+                    hnd->ch, CURLOPT_NOSIGNAL, 1L),
+                    "ubiq_support_http_request CURLOPT_NOSIGNAL");
 
                 /* send it! */
-                UBIQ_CURL_CHECK(rc = curl_easy_perform(hnd->ch),"ubiq_support_http_request curl_easy_perform");
+                UBIQ_CURL_CHECK(rc = curl_easy_perform(hnd->ch),
+                    "ubiq_support_http_request curl_easy_perform");
 
                 *rspbuf = hnd->rsp.buf;
                 *rsplen = hnd->rsp.len;
