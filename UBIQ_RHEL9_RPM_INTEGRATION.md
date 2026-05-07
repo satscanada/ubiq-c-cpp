@@ -228,64 +228,75 @@ exact variable names).
 
 ## 5. Linking Your Application
 
+The example below uses `fpe_test.c` — a self-contained FPE round-trip test
+that encrypts and decrypts the string `"sathishkumar"` using the `AName`
+dataset. It calls:
+
+- `ubiq_platform_init()` / `ubiq_platform_exit()` — library lifecycle
+- `ubiq_platform_credentials_create()` — loads `~/.ubiq/credentials`
+- `ubiq_platform_fpe_encrypt()` / `ubiq_platform_fpe_decrypt()` — FPE operations
+- `ubiq_platform_credentials_destroy()` — clean-up
+
+All of these are declared in `<ubiq/platform.h>` (installed to
+`/usr/local/include/ubiq/platform.h` by the RPM).
+
 ### Static linking (recommended for container images — no `.so` needed at runtime)
 
 ```bash
-# C
-gcc myapp.c \
+gcc fpe_test.c \
     -I/usr/local/include \
     -L/usr/local/lib \
     -lubiqclient \
     -lssl -lcrypto -lcurl -lgmp -lunistring \
     -Wno-deprecated-declarations \
-    -o myapp
-
-# C++
-g++ myapp.cpp \
-    -I/usr/local/include \
-    -L/usr/local/lib \
-    -lubiqclient++ \
-    -lssl -lcrypto -lcurl -lgmp -lunistring \
-    -Wno-deprecated-declarations \
-    -o myapp
+    -o fpe_test
 ```
 
-### Dynamic linking (smaller binary, `.so` must be in the runtime image)
+For a C++ application replace `gcc` with `g++` and `-lubiqclient` with
+`-lubiqclient++`.
+
+### Dynamic linking (smaller binary, `.so` must be present at runtime)
 
 ```bash
-# C
-gcc myapp.c \
+gcc fpe_test.c \
     -I/usr/local/include \
     -L/usr/local/lib \
     -lubiqclient \
     -lssl -lcrypto -lcurl -lgmp -lunistring \
     -Wl,-rpath,/usr/local/lib \
-    -o myapp
+    -Wno-deprecated-declarations \
+    -o fpe_test
 ```
 
 `-Wl,-rpath,/usr/local/lib` bakes the library search path into the binary so
-`LD_LIBRARY_PATH` is not needed at runtime.  Alternatively add
-`/usr/local/lib` to `/etc/ld.so.conf.d/` and run `ldconfig`.
+`LD_LIBRARY_PATH` is not needed at runtime. Alternatively add
+`/usr/local/lib` to `/etc/ld.so.conf.d/ubiq-local.conf` and run `sudo ldconfig`
+(see Section 2).
 
 ### CMake project
 
 ```cmake
+add_executable(fpe_test fpe_test.c)
+
 find_package(OpenSSL REQUIRED)
 find_library(UBIQ_LIB ubiqclient PATHS /usr/local/lib REQUIRED)
 
-target_include_directories(myapp PRIVATE /usr/local/include)
-target_link_libraries(myapp
+target_include_directories(fpe_test PRIVATE /usr/local/include)
+target_link_libraries(fpe_test
     ${UBIQ_LIB}
     OpenSSL::SSL OpenSSL::Crypto
     curl gmp unistring)
+target_compile_options(fpe_test PRIVATE -Wno-deprecated-declarations)
 ```
 
 ---
 
 ## 6. Multi-Stage Dockerfile Pattern
 
-Use a **builder stage** (with `-devel` packages) to compile, then copy only
-the binary and required `.so` files into a **slim runtime stage**.
+The example below builds and runs `fpe_test.c` — the same FPE round-trip test
+from Section 5. A **builder stage** installs the SDK RPM and compiles the
+binary; the **runtime stage** contains only the binary and the runtime `.so`
+files needed to execute it.
 
 ```dockerfile
 # ── Stage 1: build ────────────────────────────────────────────────────────────
@@ -294,16 +305,16 @@ FROM rockylinux:9 AS builder
 ARG RELEASE_TAG=v2.2.4-rhel9-fix1
 ARG GITHUB_REPO=satscanada/ubiq-c-cpp
 
-# Enable CRB repo (needed for libunistring-devel) and install build deps
+# Enable CRB (needed for libunistring-devel) and install build-time deps
 RUN dnf install -y dnf-plugins-core && \
     dnf config-manager --set-enabled crb && \
     dnf update -y --allowerasing && \
     dnf install -y --allowerasing \
-        curl jq gcc gcc-c++ \
+        curl jq gcc \
         openssl-devel libcurl-devel gmp-devel libunistring-devel && \
     dnf clean all && rm -rf /var/cache/dnf
 
-# Install the Ubiq SDK RPM from the GitHub release
+# Install the Ubiq SDK RPMs (runtime + devel) from the GitHub release
 RUN mkdir -p /tmp/rpms && cd /tmp/rpms && \
     curl -fsSL \
         "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${RELEASE_TAG}" \
@@ -312,22 +323,21 @@ RUN mkdir -p /tmp/rpms && cd /tmp/rpms && \
     dnf install -y /tmp/rpms/*.rpm && \
     rm -rf /tmp/rpms
 
-WORKDIR /build
-# Copy your application source
-COPY src/ ./src/
-COPY CMakeLists.txt .
-
-# Build — static link so the runtime stage needs no .so files
-RUN cmake -S . -B _build \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX=/usr/local && \
-    cmake --build _build --target myapp -j$(nproc)
+# Copy the application source and compile against the installed SDK
+RUN mkdir -p /app
+COPY fpe_test.c /app/fpe_test.c
+RUN gcc /app/fpe_test.c \
+        -I/usr/local/include \
+        -L/usr/local/lib \
+        -lubiqclient -lssl -lcrypto -lcurl -lgmp -lunistring \
+        -Wno-deprecated-declarations \
+        -o /app/fpe_test
 
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
 FROM rockylinux:9
 
-# Runtime-only libraries (no -devel packages)
+# Runtime-only system libraries (no -devel packages needed here)
 RUN dnf install -y dnf-plugins-core && \
     dnf config-manager --set-enabled crb && \
     dnf update -y --allowerasing && \
@@ -335,23 +345,24 @@ RUN dnf install -y dnf-plugins-core && \
         libcurl openssl-libs gmp libunistring && \
     dnf clean all && rm -rf /var/cache/dnf
 
-# If you used dynamic linking, also copy the SDK .so files from the builder
+# Copy the SDK shared library from the builder stage
 COPY --from=builder /usr/local/lib/libubiqclient.so.2.2.4 /usr/local/lib/
 RUN cd /usr/local/lib && \
     ln -sf libubiqclient.so.2.2.4 libubiqclient.so.2 && \
     ln -sf libubiqclient.so.2     libubiqclient.so   && \
     ldconfig
 
-# Copy the compiled application
-COPY --from=builder /build/_build/myapp /app/myapp
+# Copy the compiled fpe_test binary
+COPY --from=builder /app/fpe_test /app/fpe_test
 
-# Credentials are mounted at runtime — never baked into the image
-ENTRYPOINT ["/app/myapp"]
+# Credentials are mounted at runtime — never baked into the image:
+#   docker run --rm -v "$HOME/.ubiq/credentials:/root/.ubiq/credentials:ro" ...
+ENTRYPOINT ["/app/fpe_test"]
 ```
 
-> **Tip:** If you statically linked (`-lubiqclient` against `libubiqclient.a`),
-> omit the `COPY --from=builder /usr/local/lib/libubiqclient*` lines and the
-> `ldconfig` call — the binary is self-contained.
+> **Tip:** To statically link (no `.so` needed in the runtime stage), add
+> `-static` to the `gcc` command and remove the `COPY --from=builder
+> /usr/local/lib/libubiqclient*` lines and the `ldconfig` call.
 
 ---
 
@@ -360,16 +371,38 @@ ENTRYPOINT ["/app/myapp"]
 ```bash
 docker run --rm \
   -v "$HOME/.ubiq/credentials:/root/.ubiq/credentials:ro" \
-  my-app-image
+  fpe-test-image
 ```
 
-### Verifying the shared library is found (dynamic link only)
+Expected output:
+
+```
+Initializing UBIQ library...
+Init (0): Success
+Credentials from ~/.ubiq/credentials (0): Success
+
+Dataset  : AName
+Plaintext: sathishkumar (len=12)
+
+Encrypt (0): Success
+Ciphertext: <encrypted-string> (len=12)
+
+Decrypt (0): Success
+Decrypted : sathishkumar (len=12)
+
+PASS: Round-trip verified — FPE encryption working!
+```
+
+### Verify the shared library resolves correctly (dynamic link only)
 
 ```bash
-docker run --rm my-app-image ldd /app/myapp | grep ubiq
-# expected output:
-#   libubiqclient.so.2 => /usr/local/lib/libubiqclient.so.2 (0x...)
+docker run --rm --entrypoint ldd fpe-test-image /app/fpe_test | grep ubiq
+# expected:
+#   libubiqclient.so.2 => /usr/local/lib/libubiqclient.so.2.2.4 (0x...)
 ```
+
+If you see `not found`, `ldconfig` was not run or the `.so` copy step was
+omitted from the Dockerfile.
 
 ---
 
@@ -380,5 +413,5 @@ docker run --rm my-app-image ldd /app/myapp | grep ubiq
 | `error while loading shared libraries: libubiqclient.so.2` | `.so` not in runtime image or `ldconfig` not run | Add `COPY --from=builder` step and `ldconfig` |
 | `HTTP 500` from Ubiq API | HTTP/2 frame mismatch (pre-fix SDK) | Use RPM tag `v2.2.4-rhel9-fix1` or later |
 | `No such file or directory: ~/.ubiq/credentials` | Credentials not mounted | Add `-v "$HOME/.ubiq/credentials:/root/.ubiq/credentials:ro"` |
-| `undefined reference to ubiq_platform_fpe_encrypt` | Missing `-lubiqclient` at link time | Add flag to gcc/cmake link step |
+| `undefined reference to ubiq_platform_fpe_encrypt` | Missing `-lubiqclient` at link time | Add `-lubiqclient` to `gcc` flags or CMake `target_link_libraries` |
 | `libunistring-devel not found` | CRB repo not enabled | `dnf install -y dnf-plugins-core && dnf config-manager --set-enabled crb` |
