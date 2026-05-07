@@ -130,7 +130,9 @@ install(
   COMPONENT runtime)
 
 add_subdirectory(lib)
-add_subdirectory(test)
+if(BUILD_TESTING)
+  add_subdirectory(test)
+endif()
 add_subdirectory(examples)
 
 target_include_directories(
