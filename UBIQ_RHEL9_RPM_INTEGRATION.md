@@ -42,7 +42,165 @@ container that uses it:
 
 ---
 
-## 2. Credentials File
+## 2. Inspecting the Downloaded RPM
+
+Before installing, verify the RPM is the correct package and review exactly
+what it will put on disk.
+
+### Download the RPM to a local directory (host or container)
+
+```bash
+# Example: download from the GitHub release
+RELEASE_TAG=v2.2.4-rhel9-fix1
+GITHUB_REPO=satscanada/ubiq-c-cpp
+
+mkdir -p ~/ubiq-rpms && cd ~/ubiq-rpms
+curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${RELEASE_TAG}" \
+  | jq -r '.assets[] | select(.name | endswith(".rpm")) | .browser_download_url' \
+  | xargs -I{} curl -fsSLO {}
+
+ls -lh ~/ubiq-rpms/
+# ubiqclient-2.2.4-1.el9.x86_64.rpm   (runtime + shared libs)
+# ubiqclient-devel-2.2.4-1.el9.x86_64.rpm  (headers + static libs)
+```
+
+### `rpm -qp` — query package name and version (without installing)
+
+```bash
+rpm -qp ~/ubiq-rpms/ubiqclient-*.rpm
+```
+
+Expected output:
+```
+ubiqclient-2.2.4-1.el9.x86_64
+ubiqclient-devel-2.2.4-1.el9.x86_64
+```
+
+`-q` = query mode, `-p` = operate on a local `.rpm` file rather than the
+installed package database.
+
+---
+
+### `rpm -qpi` — full package information (metadata)
+
+```bash
+rpm -qpi ~/ubiq-rpms/ubiqclient-2.2.4-1.el9.x86_64.rpm
+```
+
+Expected output (excerpt):
+```
+Name        : ubiqclient
+Version     : 2.2.4
+Release     : 1.el9
+Architecture: x86_64
+Install Date: (not installed)
+Group       : Unspecified
+Size        : <bytes>
+License     : unknown
+Signature   : (none)
+Summary     : ubiqclient
+Description :
+ubiqclient
+```
+
+`-i` = show package info (name, version, architecture, description, license,
+size, build date). Useful to confirm you have the right build before installing
+it on a production host.
+
+---
+
+### `rpm -ql` — list all files the package will install
+
+For a **downloaded** (not yet installed) RPM use `-p` together with `-l`:
+
+```bash
+rpm -qpl ~/ubiq-rpms/ubiqclient-2.2.4-1.el9.x86_64.rpm
+```
+
+Expected output:
+```
+/usr/local/lib/libubiqclient.so.2.2.4
+```
+
+```bash
+rpm -qpl ~/ubiq-rpms/ubiqclient-devel-2.2.4-1.el9.x86_64.rpm
+```
+
+Expected output (excerpt):
+```
+/usr/local/include/ubiq/platform.h
+/usr/local/include/ubiq/platform/decrypt.h
+/usr/local/include/ubiq/platform/encrypt.h
+/usr/local/include/ubiq/platform/fpe.h
+...
+/usr/local/lib/libubiqclient.a
+/usr/local/lib/libubiqclient.so
+/usr/local/lib/libubiqclient.so.2
+/usr/local/lib/libubiqclient++.a
+/usr/local/lib/libubiqclient++.so
+/usr/local/lib/libubiqclient++.so.2
+/usr/local/lib/libubiqclient++.so.2.2.4
+```
+
+For an **already installed** package (no `-p`):
+
+```bash
+rpm -ql ubiqclient
+rpm -ql ubiqclient-devel
+```
+
+---
+
+### `rpm -q --requires` — show shared library dependencies declared in the RPM
+
+```bash
+rpm -qp --requires ~/ubiq-rpms/ubiqclient-2.2.4-1.el9.x86_64.rpm
+```
+
+This lists every `lib*.so` the package declares as a dependency, matching the
+runtime table in Section 1.
+
+---
+
+### `sudo ldconfig` — register the shared library with the system linker
+
+After installing the RPM the shared library lands in `/usr/local/lib`, which
+is **not** in the default `ldconfig` search path on RHEL 9. You must register
+it before any dynamically linked binary can find it:
+
+```bash
+# Option A: add /usr/local/lib to the ld.so search path (persists across reboots)
+echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/ubiq-local.conf
+sudo ldconfig
+
+# Verify the cache was updated
+ldconfig -p | grep ubiqclient
+# Expected:
+#   libubiqclient.so.2 (libc6,x86-64) => /usr/local/lib/libubiqclient.so.2.2.4
+#   libubiqclient++.so.2 (libc6,x86-64) => /usr/local/lib/libubiqclient++.so.2.2.4
+```
+
+```bash
+# Option B: one-shot for the current shell session only (no root needed)
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+```
+
+> **In a Dockerfile** run `RUN ldconfig` (no `sudo`) after copying the `.so`
+> files — the build runs as root by default.
+
+#### Confirm the binary resolves correctly
+
+```bash
+ldd /path/to/your/app | grep ubiq
+# libubiqclient.so.2 => /usr/local/lib/libubiqclient.so.2.2.4 (0x...)
+```
+
+If you see `not found` instead, `ldconfig` has not been run or `/usr/local/lib`
+is not in the cache.
+
+---
+
+## 4. Credentials File
 
 At runtime the SDK reads API credentials from `~/.ubiq/credentials` (INI
 format) or from environment variables. The default profile looks like:
@@ -68,7 +226,7 @@ exact variable names).
 
 ---
 
-## 3. Linking Your Application
+## 5. Linking Your Application
 
 ### Static linking (recommended for container images — no `.so` needed at runtime)
 
@@ -124,7 +282,7 @@ target_link_libraries(myapp
 
 ---
 
-## 4. Multi-Stage Dockerfile Pattern
+## 6. Multi-Stage Dockerfile Pattern
 
 Use a **builder stage** (with `-devel` packages) to compile, then copy only
 the binary and required `.so` files into a **slim runtime stage**.
@@ -197,7 +355,7 @@ ENTRYPOINT ["/app/myapp"]
 
 ---
 
-## 5. Running the Container
+## 7. Running the Container
 
 ```bash
 docker run --rm \
@@ -215,7 +373,7 @@ docker run --rm my-app-image ldd /app/myapp | grep ubiq
 
 ---
 
-## 6. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
