@@ -51,9 +51,7 @@ jobs:
       - name: Build
         run: |
           cd build
-          make -j$(nproc) ubiqclient-static ubiqclient++-static ubiqclient ubiqclient++
-          find . -name "*.a" -exec ranlib {} \;
-          make -j$(nproc)
+          make -j1
 
       - name: Package RPM
         run: |
