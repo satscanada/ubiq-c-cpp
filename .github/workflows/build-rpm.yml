@@ -14,6 +14,9 @@ jobs:
       image: rockylinux:9
 
     steps:
+      - name: Install Git first (required for submodules checkout)
+        run: dnf install -y git
+
       - name: Checkout with submodules
         uses: actions/checkout@v4
         with:
@@ -22,7 +25,7 @@ jobs:
       - name: Install build dependencies
         run: |
           dnf install -y \
-            cmake gcc gcc-c++ make rpm-build git \
+            cmake gcc gcc-c++ make rpm-build \
             openssl-devel libcurl-devel \
             gmp-devel libunistring-devel boost-devel
 
