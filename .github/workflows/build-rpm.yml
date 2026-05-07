@@ -9,6 +9,8 @@ on:
 jobs:
   build-rpm:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: rockylinux:9
 
