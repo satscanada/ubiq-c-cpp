@@ -23,7 +23,9 @@ jobs:
           submodules: recursive
 
       - name: Enable CRB repository
-        run: dnf config-manager --set-enabled crb
+        run: |
+          dnf install -y dnf-plugins-core
+          dnf config-manager --set-enabled crb
 
       - name: Install build dependencies
         run: |
