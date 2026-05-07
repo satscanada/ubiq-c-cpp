@@ -16,6 +16,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 IMAGE_NAME="ubiq-fpe-test:latest"
 CREDS_FILE="${HOME}/.ubiq/credentials"
 
+# Release tag to pull RPMs from — override with: RELEASE_TAG=vX.Y.Z bash run_test.sh
+RELEASE_TAG="${RELEASE_TAG:-v2.2.4-rhel9-fix1}"
+GITHUB_REPO="satscanada/ubiq-c-cpp"
+
 # ── pre-flight checks ─────────────────────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
     echo "ERROR: Docker is not installed or not in PATH."
@@ -43,10 +47,13 @@ echo " Building Docker image: ${IMAGE_NAME}"
 echo " Base: rockylinux:9 (mirrors GitHub Actions CI)"
 echo "============================================================"
 
+# Build context is docker-test/ only — no need to send the full repo
 docker build \
     -f "${SCRIPT_DIR}/Dockerfile" \
+    --build-arg RELEASE_TAG="${RELEASE_TAG}" \
+    --build-arg GITHUB_REPO="${GITHUB_REPO}" \
     -t "${IMAGE_NAME}" \
-    "${REPO_ROOT}"
+    "${SCRIPT_DIR}"
 
 echo ""
 echo "============================================================"
