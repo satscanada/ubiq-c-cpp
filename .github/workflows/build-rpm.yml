@@ -46,13 +46,13 @@ jobs:
             -DBUILD_TESTING=OFF \
             -DBUILD_SHARED_LIBS=OFF \
             -DCMAKE_C_FLAGS="-Wno-implicit-function-declaration" \
-            -DCMAKE_INSTALL_PREFIX=/usr/local \
-            "-DCMAKE_C_ARCHIVE_CREATE=<CMAKE_AR> crs <TARGET> <LINK_FLAGS> <OBJECTS>" \
-            "-DCMAKE_CXX_ARCHIVE_CREATE=<CMAKE_AR> crs <TARGET> <LINK_FLAGS> <OBJECTS>"
+            -DCMAKE_INSTALL_PREFIX=/usr/local
 
       - name: Build
         run: |
           cd build
+          make -j$(nproc) ubiqclient-static ubiqclient++-static ubiqclient ubiqclient++
+          find . -name "*.a" -exec ranlib {} \;
           make -j$(nproc)
 
       - name: Package RPM
