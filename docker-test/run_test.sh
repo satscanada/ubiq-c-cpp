@@ -10,6 +10,7 @@
 #   bash docker-test/run_test.sh
 
 set -euo pipefail
+clear
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
