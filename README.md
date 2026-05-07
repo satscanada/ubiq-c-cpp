@@ -1,5 +1,32 @@
 # Ubiq Security C/C++ Libraries
 
+## Changelog
+
+### v2.2.4-rhel9-fix1 (2026-05-07) — HTTP/2 POST Frame Mismatch Fix
+
+**Bug:** On platforms where `libcurl` is built with `nghttp2` (HTTP/2 support) — including macOS 15.x (curl 8.x) and RHEL 9.x (curl 7.76+ / nghttp2 1.43.0) — all encrypt/decrypt API calls that send a POST request body would fail with `HTTP 500 Internal Server Error`.
+
+**Root cause:** `src/lib/curl.c` used `CURLOPT_UPLOAD=1` (which sets the HTTP/2 stream frame type to `PUT`) followed by `CURLOPT_CUSTOMREQUEST="POST"` (which overrides the method header to `POST` but does **not** change the HTTP/2 frame type). The server received a `POST` pseudo-header on a `PUT`-framed stream — a protocol contradiction — and rejected it with HTTP 500.
+
+**Fix applied:** Added `CURLOPT_HTTP_VERSION_1_1` in `src/lib/curl.c` immediately after `CURLOPT_URL` is set, forcing HTTP/1.1 for all SDK requests. Under HTTP/1.1 the method is a plain text header so `CURLOPT_CUSTOMREQUEST` works correctly.
+
+```c
+// src/lib/curl.c — ubiq_support_http_request()
+curl_easy_setopt(hnd->ch, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+```
+
+**Affected symptoms:**
+- `ubiq_platform_encrypt()` / `ubiq_platform_fpe_encrypt()` returns `-53` (`-ECONNABORTED`)
+- Only POST requests fail; GET requests (metadata fetch) succeed
+
+**To check if your platform is affected:**
+```bash
+curl --version | grep nghttp2
+```
+
+See [UBIQ_HTTP2_BUG.md](UBIQ_HTTP2_BUG.md) for full technical details, the recommended long-term fix, and build instructions for RHEL 9.
+
+---
 
 The Ubiq Security C and C++ libraries provide convenient interaction with the
 Ubiq Security Platform API from applications written in the C and C++ languages.
