@@ -8,10 +8,10 @@ ARG RELEASE_TAG=v2.2.4-rhel9-fix1
 ARG GITHUB_REPO=satscanada/ubiq-c-cpp
 
 # ── patch all base packages first ────────────────────────────────────────────
-RUN dnf update -y && \
-    dnf install -y dnf-plugins-core && \
+RUN dnf install -y dnf-plugins-core && \
     dnf config-manager --set-enabled crb && \
-    dnf install -y curl jq gcc openssl-devel libcurl-devel gmp-devel libunistring-devel && \
+    dnf update -y --allowerasing && \
+    dnf install -y --allowerasing curl jq gcc openssl-devel libcurl-devel gmp-devel libunistring-devel && \
     dnf clean all && \
     rm -rf /var/cache/dnf
 
