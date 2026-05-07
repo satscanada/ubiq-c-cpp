@@ -4,8 +4,8 @@ on:
   push:
     branches: [ master ]
     tags:
-      - 'v*'           # triggers release on v2.2.4-ubiq-fix1 etc
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-rpm:
@@ -59,29 +59,33 @@ jobs:
           path: build/*.rpm
           retention-days: 30
 
-      # Only create a GitHub Release when you push a tag like v2.2.4-fix1
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: build/*.rpm
-          body: |
+          body: >
             ## Ubiq C/C++ SDK - RHEL 9 RPM (HTTP/2 Fix Applied)
 
+
             ### Changes from upstream v2.2.4
-            - Fixed HTTP/2 POST frame mismatch (`CURLOPT_UPLOAD` + `CURLOPT_CUSTOMREQUEST`)
+
+            - Fixed HTTP/2 POST frame mismatch (CURLOPT_UPLOAD + CURLOPT_CUSTOMREQUEST)
+
             - Affects: macOS curl 8.x and RHEL 9.x with nghttp2
-            - Fix: Added `CURLOPT_HTTP_VERSION_1_1` in `src/lib/curl.c`
+
+            - Fix: Added CURLOPT_HTTP_VERSION_1_1 in src/lib/curl.c
+
 
             ### Install on RHEL 9.7
-```bash
+
             sudo rpm -ivh libubiqclient-*.rpm
+
             sudo rpm -ivh libubiqclient-dev-*.rpm
-```
+
 
             ### Compile your app
-```bash
+
             gcc your_app.c -lubiqclient -lssl -lcrypto -lcurl -lgmp -lunistring -o your_app
-```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
