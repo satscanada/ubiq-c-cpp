@@ -461,6 +461,9 @@ send_billing_data(
   UBIQ_DEBUG(debug_flag, printf("%s start\n", csu));
 
   char * str = cJSON_PrintUnformatted(json_array);
+  if (str == NULL) {
+    return -ENOMEM;
+  }
   UBIQ_DEBUG(debug_flag, printf("%s  str(%s)\n", csu,  str));
 
 
