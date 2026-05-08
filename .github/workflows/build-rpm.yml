@@ -73,28 +73,41 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: build/*.rpm
-          body: >
-            ## Ubiq C/C++ SDK - RHEL 9 RPM (HTTP/2 Fix Applied)
+          body: |
+            ## Ubiq C/C++ SDK — RHEL 9 RPM (HTTP/2 Fix Applied)
 
+            ### Changes from upstream
 
-            ### Changes from upstream v2.2.4
-
-            - Fixed HTTP/2 POST frame mismatch (CURLOPT_UPLOAD + CURLOPT_CUSTOMREQUEST)
-
-            - Affects: macOS curl 8.x and RHEL 9.x with nghttp2
-
-            - Fix: Added CURLOPT_HTTP_VERSION_1_1 in src/lib/curl.c
-
+            - **Fixed HTTP/2 POST frame mismatch** (`CURLOPT_UPLOAD` + `CURLOPT_CUSTOMREQUEST`)
+              - Affects: macOS curl 8.x and RHEL 9.x with nghttp2
+              - Fix: Added `CURLOPT_HTTP_VERSION_1_1` in `src/lib/curl.c`
+            - **Fixed NULL dereference in billing** (`cJSON_PrintUnformatted` return value not checked)
+              - Caused `_strlen_evex` crash under memory pressure when using shared library
+              - Fix: Added NULL guard in `send_billing_data()` in `src/lib/billing.c`
 
             ### Install on RHEL 9.7
 
-            sudo rpm -ivh libubiqclient-*.rpm
+            ```bash
+            sudo rpm -ivh libubiqclient-2.3.0.0-1.el9.x86_64.rpm
+            sudo rpm -ivh libubiqclient-dev-2.3.0.0-1.el9.x86_64.rpm
+            ```
 
-            sudo rpm -ivh libubiqclient-dev-*.rpm
+            After install, register the shared library with the system linker:
 
+            ```bash
+            echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/ubiq-local.conf
+            sudo ldconfig
+            ```
 
             ### Compile your app
 
-            gcc your_app.c -lubiqclient -lssl -lcrypto -lcurl -lgmp -lunistring -o your_app
+            ```bash
+            gcc your_app.c \
+                -I/usr/local/include \
+                -L/usr/local/lib \
+                -lubiqclient -lssl -lcrypto -lcurl -lgmp -lunistring \
+                -Wno-deprecated-declarations \
+                -o your_app
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
