@@ -87,6 +87,16 @@ jobs:
 
             ### Install on RHEL 9.7
 
+            **If upgrading from a previous version, uninstall first:**
+
+            ```bash
+            sudo rpm -e libubiqclient-dev 2>/dev/null || true
+            sudo rpm -e libubiqclient     2>/dev/null || true
+            sudo ldconfig
+            ```
+
+            **Fresh install:**
+
             ```bash
             sudo rpm -ivh libubiqclient-2.3.0.0-1.el9.x86_64.rpm
             sudo rpm -ivh libubiqclient-dev-2.3.0.0-1.el9.x86_64.rpm
