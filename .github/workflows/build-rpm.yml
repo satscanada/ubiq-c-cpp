@@ -74,10 +74,11 @@ jobs:
         with:
           files: build/*.rpm
           body: |
-            ## Ubiq C/C++ SDK — RHEL 9 RPM (HTTP/2 Fix Applied)
+            ## Ubiq C/C++ SDK — RHEL 9 RPM v2.3.1.0
 
-            ### Changes from upstream
+            ### What's changed in v2.3.1.0
 
+            #### Bug fixes (local patches)
             - **Fixed HTTP/2 POST frame mismatch** (`CURLOPT_UPLOAD` + `CURLOPT_CUSTOMREQUEST`)
               - Affects: macOS curl 8.x and RHEL 9.x with nghttp2
               - Fix: Added `CURLOPT_HTTP_VERSION_1_1` in `src/lib/curl.c`
@@ -85,7 +86,11 @@ jobs:
               - Caused `_strlen_evex` crash under memory pressure when using shared library
               - Fix: Added NULL guard in `send_billing_data()` in `src/lib/billing.c`
 
-            ### Install on RHEL 9.7
+            #### Merged from upstream
+            - Recursive directory traversal in test harness (`find_files_recursive`) — handles nested subdirectories and filesystems that don't expose `d_type`
+            - CI pipeline now runs `dataset_types/` test coverage for all platforms (Debian 11/12, CentOS 9 Stream)
+
+            ### Install on RHEL 9
 
             **If upgrading from a previous version, uninstall first:**
 
@@ -98,8 +103,8 @@ jobs:
             **Fresh install:**
 
             ```bash
-            sudo rpm -ivh libubiqclient-2.3.0.0-1.el9.x86_64.rpm
-            sudo rpm -ivh libubiqclient-dev-2.3.0.0-1.el9.x86_64.rpm
+            sudo rpm -ivh libubiqclient-2.3.1.0-1.el9.x86_64.rpm
+            sudo rpm -ivh libubiqclient-dev-2.3.1.0-1.el9.x86_64.rpm
             ```
 
             After install, register the shared library with the system linker:
