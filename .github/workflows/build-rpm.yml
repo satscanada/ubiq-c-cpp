@@ -74,9 +74,9 @@ jobs:
         with:
           files: build/*.rpm
           body: |
-            ## Ubiq C/C++ SDK — RHEL 9 RPM v2.3.1.0
+            ## Ubiq C/C++ SDK — RHEL 9 RPM v2.3.0.0-rhel9-fix2
 
-            ### What's changed in v2.3.1.0
+            ### What's changed in v2.3.0.0-rhel9-fix2
 
             #### Bug fixes (local patches)
             - **Fixed HTTP/2 POST frame mismatch** (`CURLOPT_UPLOAD` + `CURLOPT_CUSTOMREQUEST`)
@@ -103,8 +103,8 @@ jobs:
             **Fresh install:**
 
             ```bash
-            sudo rpm -ivh libubiqclient-2.3.1.0-1.el9.x86_64.rpm
-            sudo rpm -ivh libubiqclient-dev-2.3.1.0-1.el9.x86_64.rpm
+            sudo rpm -ivh libubiqclient-2.3.0.0-1.el9.x86_64.rpm
+            sudo rpm -ivh libubiqclient-dev-2.3.0.0-1.el9.x86_64.rpm
             ```
 
             After install, register the shared library with the system linker:

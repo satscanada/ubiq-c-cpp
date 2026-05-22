@@ -1,10 +1,14 @@
 # Changelog
 
-## 2.3.1.0 - 2026-05-22
+## 2.3.0.0-rhel9-fix2 - 2026-05-22
+* Reverted project version to 2.3.0.0 (API compatibility)
 * Fixed HTTP/2 POST frame mismatch (CURLOPT_UPLOAD + CURLOPT_CUSTOMREQUEST) on macOS curl 8.x and RHEL 9.x with nghttp2; force HTTP/1.1 via CURLOPT_HTTP_VERSION_1_1
 * Fixed NULL dereference crash in billing (`_strlen_evex`) when `cJSON_PrintUnformatted` returns NULL under memory pressure
 * Merged upstream: recursive directory traversal in test harness (`find_files_recursive`)
 * Merged upstream: dataset_types test coverage added to CI pipeline
+
+## 2.3.1.0 - 2026-05-22
+* Bumped version to 2.3.1.0 (reverted — see 2.3.0.0-rhel9-fix2)
 
 ## 2.3.0.0 - 2026-03-15
 * Updated to include capabilities for new dataset types including integers, dates, datetime
